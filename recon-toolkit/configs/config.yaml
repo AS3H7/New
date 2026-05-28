@@ -1,0 +1,44 @@
+# Recon Toolkit Configuration
+# Edit this file to set your target
+
+target:
+  domain: ferrari.com
+  out_of_scope: []
+  # out_of_scope:
+  #   - shop.ferrari.com
+
+# Scanning settings
+settings:
+  threads: 20
+  timeout: 10
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  rate_limit: 5  # requests per second (be respectful)
+  
+# DNS resolvers
+dns:
+  resolvers:
+    - 8.8.8.8
+    - 8.8.4.4
+    - 1.1.1.1
+    - 1.0.0.1
+
+# Port scanner settings
+ports:
+  top_ports: [80, 443, 8080, 8443, 8000, 8888, 9090, 3000, 5000, 4443, 2083, 2087, 10000]
+  
+# JS Analysis patterns
+js_analysis:
+  secret_patterns:
+    - "api[_-]?key"
+    - "api[_-]?secret"
+    - "access[_-]?token"
+    - "auth[_-]?token"
+    - "client[_-]?secret"
+    - "private[_-]?key"
+    - "aws[_-]?access"
+    - "firebase"
+    - "sk_live_"
+    - "pk_live_"
+    - "ghp_"
+    - "glpat-"
+    - "xox[baprs]-"
